@@ -22,9 +22,10 @@ public class ParseController {
     public ResponseEntity<HttpStatus> parse(
             @RequestBody String jsonUrl
     ) {
+        double start = System.currentTimeMillis();
         parseService.parse(jsonUrl);
+        double end = System.currentTimeMillis();
+        System.out.println((end - start) / 1000); // 20-30 sec for 100 products - slow
         return ResponseEntity.ok(HttpStatus.OK);
     }
-
-
 }
