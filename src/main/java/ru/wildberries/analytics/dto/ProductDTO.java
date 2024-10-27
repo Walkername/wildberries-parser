@@ -1,7 +1,9 @@
-package ru.wildberries.analytics.models;
+package ru.wildberries.analytics.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+
+import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ProductDTO {
@@ -39,8 +41,11 @@ public class ProductDTO {
     @JsonProperty("feedbacks")
     private int feedbacks;
 
-    @JsonProperty("volume")
-    private int volume;
+    @JsonProperty("sizes")
+    private List<ProductSizeDTO> sizes;
+
+    @JsonProperty("totalQuantity")
+    private int totalQuantity;
 
     public String getName() {
         return name;
@@ -64,14 +69,6 @@ public class ProductDTO {
 
     public void setBrand(String brand) {
         this.brand = brand;
-    }
-
-    public int getVolume() {
-        return volume;
-    }
-
-    public void setVolume(String volume) {
-        this.volume = Integer.parseInt(volume);
     }
 
     public int getFeedbacks() {
@@ -138,6 +135,46 @@ public class ProductDTO {
         this.brandId = brandId;
     }
 
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public void setSupplierId(int supplierId) {
+        this.supplierId = supplierId;
+    }
+
+    public void setSupplierRating(double supplierRating) {
+        this.supplierRating = supplierRating;
+    }
+
+    public void setPics(int pics) {
+        this.pics = pics;
+    }
+
+    public void setReviewRating(double reviewRating) {
+        this.reviewRating = reviewRating;
+    }
+
+    public void setFeedbacks(int feedbacks) {
+        this.feedbacks = feedbacks;
+    }
+
+    public List<ProductSizeDTO> getSizes() {
+        return sizes;
+    }
+
+    public void setSizes(List<ProductSizeDTO> sizes) {
+        this.sizes = sizes;
+    }
+
+    public int getTotalQuantity() {
+        return totalQuantity;
+    }
+
+    public void setTotalQuantity(int totalQuantity) {
+        this.totalQuantity = totalQuantity;
+    }
+
     @Override
     public String toString() {
         return "ProductDTO{" +
@@ -152,7 +189,8 @@ public class ProductDTO {
                 ", pics=" + pics +
                 ", reviewRating=" + reviewRating +
                 ", feedbacks=" + feedbacks +
-                ", volume=" + volume +
+                ", sizes=" + sizes +
+                ", totalQuantity=" + totalQuantity +
                 '}';
     }
 }

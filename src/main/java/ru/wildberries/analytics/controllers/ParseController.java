@@ -8,7 +8,7 @@ import ru.wildberries.analytics.services.ParseService;
 
 @RestController
 @CrossOrigin
-@RequestMapping("/parser")
+@RequestMapping("/parse")
 public class ParseController {
 
     private final ParseService parseService;
@@ -18,7 +18,7 @@ public class ParseController {
         this.parseService = parseService;
     }
 
-    @PostMapping("/url")
+    @PostMapping("")
     public ResponseEntity<HttpStatus> parse(
             @RequestBody String jsonUrl
     ) {
