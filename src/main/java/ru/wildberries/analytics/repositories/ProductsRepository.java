@@ -4,8 +4,10 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 import ru.wildberries.analytics.models.Product;
 
+import java.util.Optional;
+
 @Repository
 public interface ProductsRepository extends MongoRepository<Product, Integer> {
 
-    Product findByWbId(int wbId);
+    Optional<Product> findByWbId(int wbId);
 }

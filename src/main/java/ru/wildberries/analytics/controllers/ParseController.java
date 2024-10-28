@@ -4,18 +4,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ru.wildberries.analytics.services.ParseService;
+import ru.wildberries.analytics.services.ProductsService;
 
 @RestController
 @CrossOrigin
 @RequestMapping("/parse")
 public class ParseController {
 
-    private final ParseService parseService;
+    private final ProductsService productsService;
 
     @Autowired
-    public ParseController(ParseService parseService) {
-        this.parseService = parseService;
+    public ParseController(ProductsService productsService) {
+        this.productsService = productsService;
     }
 
     @PostMapping("")
@@ -23,7 +23,7 @@ public class ParseController {
             @RequestBody String jsonUrl
     ) {
         double start = System.currentTimeMillis();
-        parseService.parse(jsonUrl);
+        productsService.parse(jsonUrl);
         double end = System.currentTimeMillis();
         System.out.println((end - start) / 1000); // 20-30 sec for 100 products - slow
         return ResponseEntity.ok(HttpStatus.OK);

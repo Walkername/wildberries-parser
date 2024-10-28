@@ -6,22 +6,26 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import ru.wildberries.analytics.dto.CatalogDTO;
-import ru.wildberries.analytics.dto.PriceStateDTO;
 import ru.wildberries.analytics.dto.ProductDTO;
 import ru.wildberries.analytics.dto.ProductSizeDTO;
 import ru.wildberries.analytics.models.PriceState;
 import ru.wildberries.analytics.models.Product;
 import ru.wildberries.analytics.models.ProductSize;
 import ru.wildberries.analytics.repositories.ProductsRepository;
+import ru.wildberries.analytics.util.UnknowPageException;
 
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.*;
 
 @Service
-public class ParseService {
+@Transactional(readOnly = true)
+public class ProductsService {
 
     private static final String URL_WILDBERRIES_API = ""; // TODO
 
@@ -50,59 +54,98 @@ public class ParseService {
     private final ProductsRepository productsRepository;
 
     @Autowired
-    public ParseService(ProductsRepository productsRepository) {
+    public ProductsService(ProductsRepository productsRepository) {
         this.productsRepository = productsRepository;
     }
 
+    public Optional<Product> findByWbId(int id) {
+        Optional<Product> product = productsRepository.findByWbId(id);
+        return product;
+    }
+
+    @Transactional
     public void parse(String jsonUrl) {
-        RestTemplate restTemplate = new RestTemplate();
         ObjectMapper mapper = new ObjectMapper();
+
+        BindingResult bindingResult;
 
         try {
             Map<String, String> urlMap = mapper.readValue(jsonUrl, Map.class);
-            String url = urlMap.get("url") + "&limit=100";
-            System.out.println(url);
-            URI uri = new URI(url);
+            String url = urlMap.get("url"); // &limit=100
+
+
+            int page = 1;
+            while (true) {
+                try {
+                    parsePage(url, page);
+                } catch (UnknowPageException e) {
+                    break;
+                }
+
+                page++;
+            }
+
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void parsePage(String url, int page) throws HttpClientErrorException, UnknowPageException {
+        ObjectMapper mapper = new ObjectMapper();
+        RestTemplate restTemplate = new RestTemplate();
+
+        String newUrl = url + "&page=" + page;
+        //System.out.println(newUrl);
+        System.out.println(url);
+
+        try {
+            URI uri = new URI(newUrl);
 
             String response = restTemplate.getForObject(uri, String.class);
 
             CatalogDTO catalog = mapper.readValue(response, CatalogDTO.class);
             System.out.println(catalog.getData().getProducts().size());
+            if (catalog.getData().getProducts().isEmpty()) {
+                throw new UnknowPageException();
+            }
 
             for (ProductDTO productDTO : catalog.getData().getProducts()) {
+                if (findByWbId(productDTO.getId()).isPresent()) {
+                    System.out.println("This product is already in database");
+                    continue;
+                }
+
                 List<PriceState> priceHistory = getPriceHistory(productDTO.getId());
 
                 Product product = convertToProduct(productDTO);
                 product.setWbId(productDTO.getId());
                 List<ProductSize> sizes = new ArrayList<>();
+                int lastPrice = 0;
                 for (ProductSizeDTO productSizeDTO : productDTO.getSizes()) {
                     ProductSize productSize = convertToProductSize(productSizeDTO);
                     productSize.setBasicPrice(productSizeDTO.getPrice().getBasic());
                     productSize.setDiscountPrice(productSizeDTO.getPrice().getProduct());
                     sizes.add(productSize);
+
+                    lastPrice = productSizeDTO.getPrice().getProduct();
                 }
                 product.setSizes(sizes);
 
 
                 PriceState currentPriceState = new PriceState();
                 currentPriceState.setTime(new Date().toString());
-                currentPriceState.setPrice(product.getSizes().get(0).getDiscountPrice());
+                currentPriceState.setPrice(lastPrice);
                 priceHistory.add(currentPriceState);
                 product.setPriceHistory(priceHistory);
 
                 // Save product in MongoDB
                 productsRepository.save(product);
             }
-
-        } catch (JsonProcessingException | URISyntaxException e) {
+        } catch (URISyntaxException | JsonProcessingException e) {
             throw new RuntimeException(e);
         }
-    }
 
-    private void parsePage(String uri, int page) {
-        for (int i = 1; i <= page; i++) {
 
-        }
     }
 
     /*
