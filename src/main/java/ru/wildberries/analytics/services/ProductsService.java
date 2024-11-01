@@ -3,21 +3,20 @@ package ru.wildberries.analytics.services;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.modelmapper.ModelMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import jakarta.annotation.PostConstruct;
+import org.bson.Document;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.index.Index;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.validation.BindingResult;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
-import ru.wildberries.analytics.dto.CatalogDTO;
-import ru.wildberries.analytics.dto.ProductDTO;
-import ru.wildberries.analytics.dto.ProductSizeDTO;
-import ru.wildberries.analytics.models.PriceState;
-import ru.wildberries.analytics.models.Product;
-import ru.wildberries.analytics.models.ProductSize;
-import ru.wildberries.analytics.repositories.ProductsRepository;
-import ru.wildberries.analytics.util.UnknowPageException;
+import ru.wildberries.analytics.util.UnknownPageException;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -26,8 +25,6 @@ import java.util.*;
 @Service
 @Transactional(readOnly = true)
 public class ProductsService {
-
-    private static final String URL_WILDBERRIES_API = ""; // TODO
 
     private static final Set<String> URL_WB_PRICE_HISTORY_APIs = Set.of(
             "https://basket-01.wbbasket.ru/",
@@ -49,36 +46,43 @@ public class ProductsService {
             "https://basket-17.wbbasket.ru/"
     );
 
-    private static final String URL_PREPROCESSOR_API = ""; // TODO
+    private static final String URL_PROCESSOR_API = "localhost:8082/process"; // TODO
 
-    private final ProductsRepository productsRepository;
+    private final MongoTemplate mongoTemplate;
 
     @Autowired
-    public ProductsService(ProductsRepository productsRepository) {
-        this.productsRepository = productsRepository;
+    public ProductsService(MongoTemplate mongoTemplate) {
+        this.mongoTemplate = mongoTemplate;
     }
 
-    public Optional<Product> findByWbId(int id) {
-        Optional<Product> product = productsRepository.findByWbId(id);
-        return product;
+    @PostConstruct
+    public void createProductIndex() {
+        Index index = new Index().on("wbId", Sort.Direction.ASC).unique();
+        mongoTemplate.indexOps("raw_products").ensureIndex(index);
+    }
+
+    public boolean existsByProductWbId(int wbId) {
+        Query query = new Query();
+        query.addCriteria(Criteria.where("wbId").is(wbId));
+
+        boolean result = mongoTemplate.exists(query, "raw_products");
+        System.out.println("wbId = " + wbId + ", " + result);
+        return result;
     }
 
     @Transactional
     public void parse(String jsonUrl) {
         ObjectMapper mapper = new ObjectMapper();
 
-        BindingResult bindingResult;
-
         try {
             Map<String, String> urlMap = mapper.readValue(jsonUrl, Map.class);
             String url = urlMap.get("url"); // &limit=100
-
 
             int page = 1;
             while (true) {
                 try {
                     parsePage(url, page);
-                } catch (UnknowPageException e) {
+                } catch (UnknownPageException e) {
                     break;
                 }
 
@@ -90,62 +94,55 @@ public class ProductsService {
         }
     }
 
-    private void parsePage(String url, int page) throws HttpClientErrorException, UnknowPageException {
+    private void parsePage(String url, int page) throws HttpClientErrorException, UnknownPageException {
         ObjectMapper mapper = new ObjectMapper();
         RestTemplate restTemplate = new RestTemplate();
 
         String newUrl = url + "&page=" + page;
         //System.out.println(newUrl);
-        System.out.println(url);
 
         try {
             URI uri = new URI(newUrl);
 
             String response = restTemplate.getForObject(uri, String.class);
+            JsonNode rootNode = mapper.readTree(response);
 
-            CatalogDTO catalog = mapper.readValue(response, CatalogDTO.class);
-            System.out.println(catalog.getData().getProducts().size());
-            if (catalog.getData().getProducts().isEmpty()) {
-                throw new UnknowPageException();
+            if (rootNode.isEmpty()) {
+                throw new UnknownPageException();
             }
 
-            for (ProductDTO productDTO : catalog.getData().getProducts()) {
-                if (findByWbId(productDTO.getId()).isPresent()) {
+            JsonNode jsonCatalog = rootNode.get("data").get("products");
+
+            for (JsonNode node : jsonCatalog) {
+                if (existsByProductWbId(node.get("id").asInt())) {
                     System.out.println("This product is already in database");
                     continue;
                 }
 
-                List<PriceState> priceHistory = getPriceHistory(productDTO.getId());
+                JsonNode jsonWithWbId = renameField(node, "id", "wbId");
+                JsonNode priceHistory = getPriceHistory(jsonWithWbId.get("wbId").asInt());
+                JsonNode finalNode = ((ObjectNode) jsonWithWbId).set("priceHistory", priceHistory);
 
-                Product product = convertToProduct(productDTO);
-                product.setWbId(productDTO.getId());
-                List<ProductSize> sizes = new ArrayList<>();
-                int lastPrice = 0;
-                for (ProductSizeDTO productSizeDTO : productDTO.getSizes()) {
-                    ProductSize productSize = convertToProductSize(productSizeDTO);
-                    productSize.setBasicPrice(productSizeDTO.getPrice().getBasic());
-                    productSize.setDiscountPrice(productSizeDTO.getPrice().getProduct());
-                    sizes.add(productSize);
+                Document doc = Document.parse(finalNode.toString());
+                mongoTemplate.save(doc, "raw_products");
 
-                    lastPrice = productSizeDTO.getPrice().getProduct();
-                }
-                product.setSizes(sizes);
-
-
-                PriceState currentPriceState = new PriceState();
-                currentPriceState.setTime(new Date().toString());
-                currentPriceState.setPrice(lastPrice);
-                priceHistory.add(currentPriceState);
-                product.setPriceHistory(priceHistory);
-
-                // Save product in MongoDB
-                productsRepository.save(product);
+                //response = restTemplate.postForObject(URL_PROCESSOR_API, newProduct, String.class);
             }
         } catch (URISyntaxException | JsonProcessingException e) {
             throw new RuntimeException(e);
         }
+    }
 
+    private JsonNode renameField(JsonNode jsonNode, String oldName, String newName) {
+        if (jsonNode.has(oldName) && jsonNode instanceof ObjectNode) {
+            ObjectNode objectNode = (ObjectNode) jsonNode;
+            JsonNode value = objectNode.get(oldName);
 
+            objectNode.remove(oldName);
+            objectNode.set(newName, value);
+        }
+
+        return jsonNode;
     }
 
     /*
@@ -153,12 +150,11 @@ public class ProductsService {
      * 20-30 sec for 100 products
      * But right now it is the only way
      */
-    private List<PriceState> getPriceHistory(int id) {
+    private JsonNode getPriceHistory(int id) {
         ObjectMapper mapper = new ObjectMapper();
         RestTemplate restTemplate = new RestTemplate();
-        List<PriceState> result = new ArrayList<>();
         String response;
-        JsonNode rootArray;
+        JsonNode rootArray = null;
 
         String halfPartUrl = "vol" + id / (int) Math.pow(10, 5)
                 + "/part" + id / (int) Math.pow(10, 3) + "/" + id + "/info/price-history.json";
@@ -168,32 +164,19 @@ public class ProductsService {
 
             try {
                 response = restTemplate.getForObject(url, String.class);
-                rootArray = mapper.readTree(response);
-            } catch (Exception e) {
-                continue;
+
+                if (response != null) {
+                    rootArray = mapper.readTree(response);
+                    break;
+                }
+            } catch (Exception ignored) {
             }
 
-            if (response != null) {
-                for (JsonNode node : rootArray) {
-                    PriceState priceState = new PriceState();
-                    priceState.setTime(node.get("dt").toString());
-                    priceState.setPrice(node.get("price").get("RUB").asInt());
-                    result.add(priceState);
-                }
-                break;
-            }
         }
 
-        return result;
-    }
-
-    private Product convertToProduct(ProductDTO productDTO) {
-        ModelMapper modelMapper = new ModelMapper();
-        return modelMapper.map(productDTO, Product.class);
-    }
-
-    private ProductSize convertToProductSize(ProductSizeDTO productSizeDTO) {
-        ModelMapper modelMapper = new ModelMapper();
-        return modelMapper.map(productSizeDTO, ProductSize.class);
+        if (rootArray == null || rootArray.isEmpty()) {
+            rootArray = mapper.valueToTree(new ArrayList<>());
+        }
+        return rootArray;
     }
 }
