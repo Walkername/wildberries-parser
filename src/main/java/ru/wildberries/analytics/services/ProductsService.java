@@ -46,7 +46,7 @@ public class ProductsService {
             "https://basket-17.wbbasket.ru/"
     );
 
-    private static final String URL_PROCESSOR_API = "localhost:8082/process"; // TODO
+    private static final String URL_PROCESSOR_API = "http://localhost:8082/process"; // TODO
 
     private final MongoTemplate mongoTemplate;
 
@@ -126,7 +126,7 @@ public class ProductsService {
                 Document doc = Document.parse(finalNode.toString());
                 mongoTemplate.save(doc, "raw_products");
 
-                //response = restTemplate.postForObject(URL_PROCESSOR_API, newProduct, String.class);
+                response = restTemplate.postForObject(URL_PROCESSOR_API, finalNode, String.class);
             }
         } catch (URISyntaxException | JsonProcessingException e) {
             throw new RuntimeException(e);
