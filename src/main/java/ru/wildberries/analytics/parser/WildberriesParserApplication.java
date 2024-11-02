@@ -1,13 +1,13 @@
-package ru.wildberries.analytics;
+package ru.wildberries.analytics.parser;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class ParserApiApplication {
+public class WildberriesParserApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(ParserApiApplication.class, args);
+        SpringApplication.run(WildberriesParserApplication.class, args);
     }
 
 }

@@ -1,4 +1,4 @@
-package ru.wildberries.analytics.services;
+package ru.wildberries.analytics.parser.services;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
-import ru.wildberries.analytics.util.UnknownPageException;
+import ru.wildberries.analytics.parser.util.UnknownPageException;
 
 import java.net.URI;
 import java.net.URISyntaxException;
