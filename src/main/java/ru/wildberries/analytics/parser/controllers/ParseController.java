@@ -25,7 +25,7 @@ public class ParseController {
         double start = System.currentTimeMillis();
         productsService.parse(jsonUrl);
         double end = System.currentTimeMillis();
-        System.out.println((end - start) / 1000); // 20-30 sec for 100 products - slow
+        System.out.println("All pages are parsed: " + (end - start) / 1000); // 20-30 sec for 100 products - slow
         return ResponseEntity.ok(HttpStatus.OK);
     }
 }

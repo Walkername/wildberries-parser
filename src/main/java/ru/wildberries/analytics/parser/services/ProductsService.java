@@ -47,16 +47,21 @@ public class ProductsService {
             "https://basket-17.wbbasket.ru/"
     );
 
-    // You need change url in application.properties
-    // if you will use docker containers
-    @Value("${processor.service.url}")
-    private static String URL_PROCESSOR_API;
+    private final String URL_PROCESSOR_API;
 
     private final MongoTemplate mongoTemplate;
 
+
+
     @Autowired
-    public ProductsService(MongoTemplate mongoTemplate) {
+    public ProductsService(
+            MongoTemplate mongoTemplate,
+            // You need change url in application.properties
+            // if you will use docker containers
+            @Value("${processor.service.url}") String URL_PROCESSOR_API
+    ) {
         this.mongoTemplate = mongoTemplate;
+        this.URL_PROCESSOR_API = URL_PROCESSOR_API;
     }
 
     @PostConstruct
@@ -105,7 +110,10 @@ public class ProductsService {
         try {
             URI uri = new URI(newUrl);
 
+            //double startRequestCatalog = System.currentTimeMillis();
             String response = restTemplate.getForObject(uri, String.class);
+            //double endRequestCatalog = System.currentTimeMillis();
+            //System.out.println("Catalog received: " + (endRequestCatalog - startRequestCatalog) / 1000 + "\n");
             JsonNode rootNode = mapper.readTree(response);
 
             if (rootNode.isEmpty()) {
@@ -115,6 +123,7 @@ public class ProductsService {
             JsonNode jsonCatalog = rootNode.get("data").get("products");
 
             for (JsonNode node : jsonCatalog) {
+                //double startProduct = System.currentTimeMillis();
                 int wbId = node.get("id").asInt();
                 if (existsByProductWbId(wbId)) {
                     System.out.println("Product with this ID is already in DB: " + wbId);
@@ -124,14 +133,23 @@ public class ProductsService {
                 JsonNode jsonWithWbId = renameField(node, "id", "wbId");
                 JsonNode priceHistory = getPriceHistory(jsonWithWbId.get("wbId").asInt());
                 JsonNode finalNode = ((ObjectNode) jsonWithWbId).set("priceHistory", priceHistory);
+                //double endProduct = System.currentTimeMillis();
+                //System.out.println("Transformed product: " + (endProduct - startProduct) / 1000);
 
                 // First: send json to processor service
+                //double startRequestProcessor = System.currentTimeMillis();
                 response = restTemplate.postForObject(URL_PROCESSOR_API, finalNode, String.class);
+                //double endRequestProcessor = System.currentTimeMillis();
+                //System.out.println("Response from processor service after: "
+                //        + (endRequestProcessor - startRequestProcessor) / 1000);
 
                 // Second: save json to DB
                 // If json wasn't send to processor, then it will not be saved to DB
                 Document doc = Document.parse(finalNode.toString());
+                //double startMongoDB = System.currentTimeMillis();
                 mongoTemplate.save(doc, "raw_products");
+                //double endMongoDB = System.currentTimeMillis();
+                //System.out.println("Save in DB: " + (endMongoDB - startMongoDB) / 1000 + "\n");
             }
         } catch (URISyntaxException | JsonProcessingException e) {
             throw new RuntimeException(e);
