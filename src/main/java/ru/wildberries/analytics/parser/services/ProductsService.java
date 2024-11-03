@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.PostConstruct;
 import org.bson.Document;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.index.Index;
@@ -46,7 +47,10 @@ public class ProductsService {
             "https://basket-17.wbbasket.ru/"
     );
 
-    private static final String URL_PROCESSOR_API = "http://localhost:8082/process"; // TODO
+    // You need change url in application.properties
+    // if you will use docker containers
+    @Value("${processor.service.url}")
+    private static String URL_PROCESSOR_API;
 
     private final MongoTemplate mongoTemplate;
 
@@ -123,10 +127,13 @@ public class ProductsService {
                 JsonNode priceHistory = getPriceHistory(jsonWithWbId.get("wbId").asInt());
                 JsonNode finalNode = ((ObjectNode) jsonWithWbId).set("priceHistory", priceHistory);
 
+                // First: send json to processor service
+                response = restTemplate.postForObject(URL_PROCESSOR_API, finalNode, String.class);
+
+                // Second: save json to DB
+                // If json wasn't send to processor, then it will not be saved to DB
                 Document doc = Document.parse(finalNode.toString());
                 mongoTemplate.save(doc, "raw_products");
-
-                response = restTemplate.postForObject(URL_PROCESSOR_API, finalNode, String.class);
             }
         } catch (URISyntaxException | JsonProcessingException e) {
             throw new RuntimeException(e);
