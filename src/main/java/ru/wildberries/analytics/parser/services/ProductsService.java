@@ -68,10 +68,7 @@ public class ProductsService {
     public boolean existsByProductWbId(int wbId) {
         Query query = new Query();
         query.addCriteria(Criteria.where("wbId").is(wbId));
-
-        boolean result = mongoTemplate.exists(query, "raw_products");
-        System.out.println("wbId = " + wbId + ", " + result);
-        return result;
+        return mongoTemplate.exists(query, "raw_products");
     }
 
     @Transactional
@@ -118,8 +115,9 @@ public class ProductsService {
             JsonNode jsonCatalog = rootNode.get("data").get("products");
 
             for (JsonNode node : jsonCatalog) {
-                if (existsByProductWbId(node.get("id").asInt())) {
-                    System.out.println("This product is already in database");
+                int wbId = node.get("id").asInt();
+                if (existsByProductWbId(wbId)) {
+                    System.out.println("Product with this ID is already in DB: " + wbId);
                     continue;
                 }
 
