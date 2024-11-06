@@ -90,6 +90,8 @@ public class ProductsService {
                     parsePage(url, page);
                 } catch (UnknownPageException e) {
                     break;
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
                 }
 
                 page++;
@@ -100,7 +102,7 @@ public class ProductsService {
         }
     }
 
-    private void parsePage(String url, int page) throws HttpClientErrorException, UnknownPageException {
+    private void parsePage(String url, int page) throws HttpClientErrorException, UnknownPageException, InterruptedException {
         ObjectMapper mapper = new ObjectMapper();
         RestTemplate restTemplate = new RestTemplate();
 
@@ -110,10 +112,18 @@ public class ProductsService {
         try {
             URI uri = new URI(newUrl);
 
-            double startRequestCatalog = System.currentTimeMillis();
-            String response = restTemplate.getForObject(uri, String.class);
-            double endRequestCatalog = System.currentTimeMillis();
-            System.out.println("Catalog received: " + (endRequestCatalog - startRequestCatalog) / 1000 + "\n");
+            //double startRequestCatalog = System.currentTimeMillis();
+            String response = "";
+            try {
+                response = restTemplate.getForObject(uri, String.class);
+            } catch (HttpClientErrorException e) {
+                System.out.println("HttpClientErrorException, skipping");
+                //Thread.sleep(60000L);
+                //response = restTemplate.getForObject(uri, String.class);
+            }
+
+            //double endRequestCatalog = System.currentTimeMillis();
+            //System.out.println("Catalog received: " + (endRequestCatalog - startRequestCatalog) / 1000 + "\n");
             JsonNode rootNode = mapper.readTree(response);
 
             if (rootNode.isEmpty()) {
@@ -124,7 +134,7 @@ public class ProductsService {
             JsonNode jsonCatalog = rootNode.get("data").get("products");
 
             for (JsonNode node : jsonCatalog) {
-                double startProduct = System.currentTimeMillis();
+                //double startProduct = System.currentTimeMillis();
                 int wbId = node.get("id").asInt();
                 if (existsByProductWbId(wbId)) {
                     System.out.println("Product with this ID is already in DB: " + wbId);
@@ -134,23 +144,24 @@ public class ProductsService {
                 JsonNode jsonWithWbId = renameField(node, "id", "wbId");
                 JsonNode priceHistory = getPriceHistory(jsonWithWbId.get("wbId").asInt());
                 JsonNode finalNode = ((ObjectNode) jsonWithWbId).set("priceHistory", priceHistory);
-                double endProduct = System.currentTimeMillis();
-                System.out.println("Transformed product: " + (endProduct - startProduct) / 1000);
+                //double endProduct = System.currentTimeMillis();
+                //System.out.println("Transformed product: " + (endProduct - startProduct) / 1000);
 
                 // First: send json to processor service
-                double startRequestProcessor = System.currentTimeMillis();
+                //double startRequestProcessor = System.currentTimeMillis();
                 response = restTemplate.postForObject(URL_PROCESSOR_API, finalNode, String.class);
-                double endRequestProcessor = System.currentTimeMillis();
-                System.out.println("Response from processor service after: "
-                        + (endRequestProcessor - startRequestProcessor) / 1000);
+                //double endRequestProcessor = System.currentTimeMillis();
+                //System.out.println("Response from processor service after: "
+                //        + (endRequestProcessor - startRequestProcessor) / 1000);
 
                 // Second: save json to DB
                 // If json wasn't send to processor, then it will not be saved to DB
                 Document doc = Document.parse(finalNode.toString());
-                double startMongoDB = System.currentTimeMillis();
+                //double startMongoDB = System.currentTimeMillis();
                 mongoTemplate.save(doc, "raw_products");
-                double endMongoDB = System.currentTimeMillis();
-                System.out.println("Save in DB: " + (endMongoDB - startMongoDB) / 1000 + "\n");
+                //double endMongoDB = System.currentTimeMillis();
+                //System.out.println("Save in DB: " + (endMongoDB - startMongoDB) / 1000 + "\n");
+                System.out.println("Save in DB");
             }
         } catch (URISyntaxException | JsonProcessingException ex) {
             ex.printStackTrace();
@@ -193,8 +204,8 @@ public class ProductsService {
                     rootArray = mapper.readTree(response);
                     break;
                 }
-            } catch (Exception ex) {
-                ex.printStackTrace();
+            } catch (Exception ignored) {
+                //ex.printStackTrace();
             }
 
         }
