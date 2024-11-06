@@ -105,6 +105,7 @@ public class ProductsService {
         RestTemplate restTemplate = new RestTemplate();
 
         String newUrl = url + "&page=" + page;
+        System.out.println("Page: " + page);
         //System.out.println(newUrl);
 
         try {
@@ -112,6 +113,10 @@ public class ProductsService {
 
             //double startRequestCatalog = System.currentTimeMillis();
             String response = restTemplate.getForObject(uri, String.class);
+            if (response == null) {
+                System.out.println("Last page - " + page);
+                throw new UnknownPageException();
+            }
             //response = Objects.requireNonNullElse(response, "");
             //double endRequestCatalog = System.currentTimeMillis();
             //System.out.println("Catalog received: " + (endRequestCatalog - startRequestCatalog) / 1000 + "\n");
@@ -154,8 +159,10 @@ public class ProductsService {
                 //System.out.println("Save in DB: " + (endMongoDB - startMongoDB) / 1000 + "\n");
                 System.out.println("Save in DB");
             }
+        } catch (UnknownPageException e) {
+            throw new UnknownPageException();
         } catch (Exception ex) {
-            ex.printStackTrace();
+            System.out.println("Exception: " + ex);;
         }
     }
 
