@@ -90,8 +90,6 @@ public class ProductsService {
                     parsePage(url, page);
                 } catch (UnknownPageException e) {
                     break;
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
                 }
 
                 page++;
@@ -102,7 +100,7 @@ public class ProductsService {
         }
     }
 
-    private void parsePage(String url, int page) throws HttpClientErrorException, UnknownPageException, InterruptedException {
+    private void parsePage(String url, int page) throws UnknownPageException {
         ObjectMapper mapper = new ObjectMapper();
         RestTemplate restTemplate = new RestTemplate();
 
@@ -113,15 +111,8 @@ public class ProductsService {
             URI uri = new URI(newUrl);
 
             //double startRequestCatalog = System.currentTimeMillis();
-            String response = "";
-            try {
-                response = restTemplate.getForObject(uri, String.class);
-            } catch (HttpClientErrorException e) {
-                System.out.println("HttpClientErrorException, skipping");
-                //Thread.sleep(60000L);
-                //response = restTemplate.getForObject(uri, String.class);
-            }
-
+            String response = restTemplate.getForObject(uri, String.class);
+            //response = Objects.requireNonNullElse(response, "");
             //double endRequestCatalog = System.currentTimeMillis();
             //System.out.println("Catalog received: " + (endRequestCatalog - startRequestCatalog) / 1000 + "\n");
             JsonNode rootNode = mapper.readTree(response);
@@ -163,7 +154,7 @@ public class ProductsService {
                 //System.out.println("Save in DB: " + (endMongoDB - startMongoDB) / 1000 + "\n");
                 System.out.println("Save in DB");
             }
-        } catch (URISyntaxException | JsonProcessingException ex) {
+        } catch (Exception ex) {
             ex.printStackTrace();
         }
     }
